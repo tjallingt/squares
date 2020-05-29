@@ -2,14 +2,17 @@
   "name": "squares",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://tjallingt.github.io/dots-and-boxes",
   "dependencies": {
-    "@emotion/core": "^10.0.10",
-    "@emotion/styled": "^10.0.12",
+    "gh-pages": "^2.2.0",
+    "immer": "^6.0.9",
     "react": "^16.8.6",
     "react-dom": "^16.8.6",
     "react-scripts": "3.0.1"
   },
   "scripts": {
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build",
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
@@ -17,6 +20,10 @@
   },
   "eslintConfig": {
     "extends": "react-app"
+  },
+  "prettier": {
+    "singleQuote": true,
+    "trailingComma": "all"
   },
   "browserslist": {
     "production": [

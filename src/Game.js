@@ -1,4 +1,5 @@
 import React from 'react';
+import produce from 'immer';
 import './Game.css';
 
 const WIDTH = 3;
@@ -15,14 +16,16 @@ const SQUARE_CLASSES = {
   [PLAYER_TWO]: 'two',
 };
 
-const initialState = {
-  player: PLAYER_ONE,
-  squares: createInitialSquares(),
-  walls: createInitialWalls(),
-};
+function init() {
+  return {
+    player: PLAYER_ONE,
+    squares: createInitialSquares(WIDTH, HEIGHT),
+    walls: createInitialWalls(WIDTH, HEIGHT),
+  };
+}
 
 export default function Game() {
-  const [state, dispatch] = React.useReducer(reducer, initialState);
+  const [state, dispatch] = React.useReducer(reducer, undefined, init);
 
   let winner = whoWon(state.squares);
   if (winner !== false) {
@@ -39,7 +42,9 @@ export default function Game() {
             rowState={rowState}
             squares={state.squares}
             index={rowIndex}
-            onTake={cellIndex => dispatch({ rowIndex, cellIndex })}
+            onTake={(cellIndex) => {
+              dispatch({ type: 'take', rowIndex, cellIndex });
+            }}
           />
         ))}
       </div>
@@ -79,78 +84,85 @@ function Row({ rowState, squares, index: rowIndex, onTake }) {
   );
 }
 
-function reducer(state, { rowIndex, cellIndex }) {
-  let newWalls = updateWalls(state.walls, rowIndex, cellIndex);
+function reducer(state, action) {
+  switch (action.type) {
+    case 'take': {
+      return updateSquares(state, action);
+    }
 
-  let [newSquares, didTake] = updateSquares(state.squares, newWalls, state.player);
+    case 'reset': {
+      return init(action);
+    }
+
+    default:
+      throw new Error(`unknown action "${action.type}"`);
+  }
+}
+
+function updateSquares(state, action) {
+  const newWalls = produce(state.walls, (draft) => {
+    draft[action.rowIndex][action.cellIndex] = true;
+  });
+
+  let didTakeSquare = false;
+  let newSquares = state.squares.map((squareTakenBy, squareIndex) => {
+    if (squareTakenBy === UNTAKEN) {
+      let col = squareIndex % WIDTH;
+      let row = (squareIndex - col) / HEIGHT;
+
+      let top = newWalls[row * 2][col];
+      let left = newWalls[row * 2 + 1][col];
+      let right = newWalls[row * 2 + 1][col + 1];
+      let bottom = newWalls[row * 2 + 2][col];
+
+      if (top && left && right && bottom) {
+        didTakeSquare = true;
+        return state.player;
+      }
+    }
+    return squareTakenBy;
+  });
 
   let nextPlayer = state.player;
-  if (!didTake) {
+  if (didTakeSquare === false) {
     nextPlayer = state.player === PLAYER_ONE ? PLAYER_TWO : PLAYER_ONE;
   }
 
   return { player: nextPlayer, walls: newWalls, squares: newSquares };
 }
 
-function updateSquares(squares, walls, player) {
-  let didTake = false;
-  let newSquares = squares.map((state, index) => {
-    if (state === UNTAKEN) {
-      let col = index % WIDTH;
-      let row = (index - col) / HEIGHT;
-
-      let top = walls[row * 2][col];
-      let left = walls[row * 2 + 1][col];
-      let right = walls[row * 2 + 1][col + 1];
-      let bottom = walls[row * 2 + 2][col];
-
-      if (top && left && right && bottom) {
-        didTake = true;
-        return player;
-      }
-    }
-    return state;
-  });
-  return [newSquares, didTake];
-}
-
-function updateWalls(walls, rowIndex, cellIndex) {
-  return walls.map((row, rowIdx) => {
-    if (rowIndex === rowIdx) {
-      return row.map((cell, cellIdx) => {
-        if (cellIndex === cellIdx) {
-          return true;
-        }
-        return cell;
-      });
-    }
-    return row;
-  });
-}
-
 function whoWon(squares) {
-  let finished = squares.every(square => square !== UNTAKEN);
-  if (!finished) return false;
+  const playerScores = new Map();
+  let winner = undefined;
 
-  let playerScores = squares.reduce((players, square) => {
-    return players.set(square, (players.get(square) || 0) + 1);
-  }, new Map());
+  for (const squareTakenBy of squares) {
+    if (squareTakenBy === UNTAKEN) return false;
 
-  return Array.from(playerScores)
-    .sort((a, b) => a[1] - b[1])
-    .pop()[0];
+    const previousScore = playerScores.get(squareTakenBy) || 0;
+    const currentScore = previousScore + 1;
+
+    const highestScore = playerScores.get(winner) || 0;
+
+    if (currentScore > highestScore) {
+      winner = squareTakenBy;
+    }
+
+    playerScores.set(squareTakenBy, currentScore);
+  }
+
+  return winner;
 }
 
-function createInitialSquares() {
-  // create a HEIGHT x WIDTH array filled with UNTAKEN squares
-  return Array.from(range(HEIGHT * WIDTH, UNTAKEN));
+function createInitialSquares(width, height) {
+  // create a width * height array filled with UNTAKEN squares
+  return Array.from(range(width * height, UNTAKEN));
 }
 
-function createInitialWalls() {
-  let numRows = HEIGHT * 2 + 1;
+function createInitialWalls(width, height) {
+  let numRows = height * 2 + 1;
   return Array.from(range(numRows)).map((_, index) => {
     let isOdd = Boolean(index % 2);
-    let numCols = isOdd ? WIDTH + 1 : WIDTH;
+    let numCols = isOdd ? width + 1 : width;
     return Array.from(range(numCols, false));
   });
 }
